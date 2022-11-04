@@ -1,4 +1,6 @@
 using Microsoft.Data.Sqlite;
+using System.Diagnostics;
+using System.Reflection;
 
 namespace Squidward{
     public class Program{
@@ -20,7 +22,7 @@ namespace Squidward{
             CreateUUID(4) + @"-" +
             CreateUUID(12);
 
-            File.Copy("schema.calib", paletteName+".calib");
+            File.Copy(AppDomain.CurrentDomain.BaseDirectory+"schema.calib", paletteName+".calib");
             
             using (var connection = new SqliteConnection("Data Source="+paletteName+".calib"))
             {
@@ -34,6 +36,7 @@ namespace Squidward{
                 ";
 
                 addGlobalData.ExecuteNonQuery();
+                addGlobalData.Dispose();
 
                 uint numColors = 0;
 
@@ -55,6 +58,25 @@ namespace Squidward{
                     VALUES (1, '''<?xml version=""1.0"" encoding=""UTF-8"" standalone=""no"" ?><TreeView xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"" xsi:noNamespaceSchemaLocation=""LibraryDatabaseTreeView.xsd""><Product><Name>Chief Architect Premier X13 Academic Version</Name><ProductVersion>23.3.0.81</ProductVersion><FileVersion>3256</FileVersion></Product><Lock>0</Lock><Database Id=""{"+dbid+@"}"" Source=""%temp%/ChiefTemp__2.calib""/><Directory Name="""+paletteName+@""">"+itemsXml+@"</Directory></TreeView>''', 'User Catalog');
                 ";
                 addColorViews.ExecuteNonQuery();
+                addColorViews.Dispose();
+
+                connection.Close();
+                connection.Dispose();
+            }
+            SqliteConnection.ClearAllPools();
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            if(WaitForFile(paletteName+".calib")){
+                var p = new Process();
+                p.StartInfo = new ProcessStartInfo(Path.GetFullPath(paletteName+".calib"))
+                { 
+                    UseShellExecute = true
+                };
+                p.Start();
+            }
+            else{
+                Console.WriteLine("File Locked!");
+                Thread.Sleep(50);
             }
         }
         private static void AddColor(string colorName, string DatabaseUniqueId, string rgbhex, uint id, SqliteConnection connection){
@@ -98,6 +120,21 @@ namespace Squidward{
             }
 
             return new string(chars);
+        }
+
+        private static bool WaitForFile (string fullPath) // https://stackoverflow.com/a/3677960
+        {
+            for (int numTries = 0; numTries < 20; numTries++) {
+                try {
+                    new FileStream (fullPath, FileMode.Open).Dispose();
+                    return true;
+                }
+                catch (IOException) {
+                    Thread.Sleep (50);
+                }
+            }
+
+            return false;
         }
     }
 }
